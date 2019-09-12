@@ -1,0 +1,164 @@
+<!--
+  ~ This file is part of Waarp Project (named also Waarp or GG).
+  ~
+  ~  Copyright (c) 2019, Waarp SAS, and individual contributors by the @author
+  ~  tags. See the COPYRIGHT.txt in the distribution for a full listing of
+  ~  individual contributors.
+  ~
+  ~  All Waarp Project is free software: you can redistribute it and/or
+  ~  modify it under the terms of the GNU General Public License as published by
+  ~  the Free Software Foundation, either version 3 of the License, or (at your
+  ~  option) any later version.
+  ~
+  ~  Waarp is distributed in the hope that it will be useful, but WITHOUT ANY
+  ~  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+  ~  A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+  ~
+  ~  You should have received a copy of the GNU General Public License along with
+  ~  Waarp . If not, see <http://www.gnu.org/licenses/>.
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>Waarp</groupId>
+  <artifactId>selenium-java</artifactId>
+  <name>Waarp Shaded Selenium using JDK8 test only</name>
+  <version>3.141.59</version>
+  <description>
+    Shaded version of Selenium to prevent issue on Jdk6 with other libraries
+  </description>
+  <url>http://waarp.github.com/WaarpR66</url>
+  <inceptionYear>2019</inceptionYear>
+  <parent>
+    <groupId>Waarp</groupId>
+    <artifactId>Waarp-Shaded-Parent</artifactId>
+    <version>1.0.0</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <properties>
+    <!-- <root.directory>${project.parent.basedir}</root.directory> -->
+    <module.project>true</module.project>
+
+    <skipITs>true</skipITs>
+
+    <waarp.directory.version>org.waarp.openr66.protocol
+    </waarp.directory.version>
+    <waarp.module.version>org/waarp/openr66/protocol
+    </waarp.module.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.seleniumhq.selenium</groupId>
+      <artifactId>selenium-java</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.detro</groupId>
+      <artifactId>ghostdriver</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.seleniumhq.selenium</groupId>
+      <artifactId>htmlunit-driver</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>${maven-shade-plugin}</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <minimizeJar>false</minimizeJar>
+              <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+              <createDependencyReducedPom>true</createDependencyReducedPom>
+              <createSourcesJar>false</createSourcesJar>
+              <keepDependenciesWithProvidedScope>true</keepDependenciesWithProvidedScope>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <useBaseVersion>true</useBaseVersion>
+              <transformers>
+                <transformer
+                  implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
+                <transformer
+                  implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                  <addHeader>false</addHeader>
+                </transformer>
+                <transformer
+                  implementation="org.apache.maven.plugins.shade.resource.ResourceBundleAppendingTransformer"/>
+                <transformer
+                  implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <transformer
+                  implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <manifestEntries>
+                    <X-Compile-Source-JDK>${java.version}</X-Compile-Source-JDK>
+                    <X-Compile-Target-JDK>${java.version}</X-Compile-Target-JDK>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
+              <artifactSet>
+                <includes>
+                  <include>Waarp</include>
+                  <include>*</include>
+                </includes>
+                <excludes>
+                  <exclude>classworlds:classworlds</exclude>
+                  <exclude>junit</exclude>
+                  <exclude>jmock</exclude>
+                  <exclude>org.apache.maven:lib:tests</exclude>
+                  <exclude>com.github.jnr</exclude>
+                  <exclude>org.assertj</exclude>
+                  <exclude>com.google.code.gson:*</exclude>
+                  <exclude>io.rest-assured</exclude>
+                  <exclude>org.easymock</exclude>
+                  <exclude>org.mockito</exclude>
+                  <exclude>org.testcontainers</exclude>
+                  <exclude>net.java.dev.jna</exclude>
+                  <exclude>org.apache.ant</exclude>
+                  <exclude>Oracle</exclude>
+                </excludes>
+              </artifactSet>
+              <!--<filters>
+                <filter>
+                  <artifact>xalan:xalan</artifact>
+                  <excludes>
+                    <exclude>org/apache/xalan/extensions/bsf/**</exclude>
+                  </excludes>
+                </filter>
+                <filter>
+                  <artifact>xalan:xalan</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.BSFManager</exclude>
+                  </excludes>
+                </filter>
+              </filters>-->
+              <relocations>
+                <relocation>
+                  <pattern>com.google.common</pattern>
+                  <shadedPattern>com.shaded.google.common</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache</pattern>
+                  <shadedPattern>org.shaded.apache</shadedPattern>
+                </relocation>
+              </relocations>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>
