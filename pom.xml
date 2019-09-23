@@ -270,6 +270,32 @@
     <coberturaMavenPluginVersion>2.7</coberturaMavenPluginVersion>
   </properties>
 
+  <profiles>
+    <profile>
+      <id>release</id>
+      <distributionManagement>
+        <repository>
+          <id>centralArtifactory</id>
+          <name>Local Artifactory-releases</name>
+          <url>http://127.0.0.1:8181/artifactory/libs-release-local</url>
+        </repository>
+      </distributionManagement>
+      <build>
+        <plugins>
+          <plugin>
+            <inherited>true</inherited>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-deploy-plugin</artifactId>
+            <version>3.0.0-M1</version><!-- 2.8.1 -->
+            <configuration>
+              <updateReleaseInfo>true</updateReleaseInfo>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
   <build>
     <pluginManagement>
       <plugins>
