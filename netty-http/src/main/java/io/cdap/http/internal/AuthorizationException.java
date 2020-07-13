@@ -19,39 +19,31 @@ package io.cdap.http.internal;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 
 /**
- *Creating Http Response for Exception messages.
+ * Exception that gets thrown when a request tries to access a resource that requires roles
+ * and {@link io.cdap.http.AuthHandler#hasRoles(HttpRequest, String[])} doesn't accept it.
  */
-public class HandlerException extends Exception {
+public class AuthorizationException extends HandlerException {
 
-  private final HttpResponseStatus failureStatus;
-  private final String message;
-
-  public HandlerException(HttpResponseStatus failureStatus, String message) {
-    super(message);
-    this.failureStatus = failureStatus;
-    this.message = message;
+  public AuthorizationException() {
+    super(HttpResponseStatus.UNAUTHORIZED,
+          "Request doesn't satisfy role requirement.");
   }
 
-  HandlerException(HttpResponseStatus failureStatus, String message, Throwable cause) {
-    super(message, cause);
-    this.failureStatus = failureStatus;
-    this.message = message;
-  }
-
+  @Override
   public HttpResponse createFailureResponse() {
-    FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, failureStatus,
-                                                            Unpooled.copiedBuffer(message, InternalUtil.UTF_8));
+    FullHttpResponse response =
+        new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,
+                                    HttpResponseStatus.FORBIDDEN, Unpooled
+                                        .copiedBuffer("FORBIDDEN",
+                                                      InternalUtil.UTF_8));
     HttpUtil.setContentLength(response, response.content().readableBytes());
     return response;
-  }
-
-  public String getMessage() {
-    return message;
   }
 }
