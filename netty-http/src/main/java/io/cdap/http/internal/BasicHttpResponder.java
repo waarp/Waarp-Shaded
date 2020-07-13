@@ -1,5 +1,5 @@
 /*
- * Copyright © 2017-2019 Cask Data, Inc.
+ * Copyright © 2017-2020 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -27,6 +27,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.DefaultFileRegion;
 import io.netty.channel.FileRegion;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
@@ -34,6 +35,7 @@ import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpChunkedInput;
+import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -50,6 +52,8 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
+import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -63,11 +67,13 @@ final class BasicHttpResponder extends AbstractHttpResponder {
   private final Channel channel;
   private final AtomicBoolean responded;
   private final boolean sslEnabled;
+  private final int chunkMemoryLimit;
 
-  BasicHttpResponder(Channel channel, boolean sslEnabled) {
+  BasicHttpResponder(Channel channel, boolean sslEnabled, int chunkMemoryLimit) {
     this.channel = channel;
     this.responded = new AtomicBoolean(false);
     this.sslEnabled = sslEnabled;
+    this.chunkMemoryLimit = chunkMemoryLimit;
   }
 
   @Override
@@ -86,7 +92,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
 
     checkNotResponded();
     channel.write(response);
-    return new ChannelChunkResponder(channel);
+    return new ChannelChunkResponder(channel, chunkMemoryLimit);
   }
 
   @Override
@@ -126,10 +132,21 @@ final class BasicHttpResponder extends AbstractHttpResponder {
         // The HttpChunkedInput will write out the last content
         channel.writeAndFlush(new HttpChunkedInput(new ChunkedFile(raf, 8192)));
       } else {
-        // The FileRegion will close the file channel when it is done sending.
-        FileRegion region = new DefaultFileRegion(raf.getChannel(), 0, file.length());
-        channel.write(region);
-        channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+        final Runnable completion = prepareSendFile(channel);
+        try {
+          // The FileRegion will close the file channel when it is done sending.
+          FileRegion region = new DefaultFileRegion(raf.getChannel(), 0, file.length());
+          channel.write(region);
+          channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture future) {
+              completion.run();
+            }
+          });
+        } catch (Throwable t) {
+          completion.run();
+          throw t;
+        }
       }
     } catch (Throwable t) {
       try {
@@ -157,7 +174,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
       return;
     }
 
-    HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+    HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
     addContentTypeIfMissing(response.headers().add(headers), OCTET_STREAM_TYPE);
 
     if (contentLength < 0L) {
@@ -223,6 +240,35 @@ final class BasicHttpResponder extends AbstractHttpResponder {
   private void checkNotResponded() {
     if (!responded.compareAndSet(false, true)) {
       throw new IllegalStateException("Response has already been sent");
+    }
+  }
+
+  /**
+   * Prepares the given {@link Channel} for the sending file.
+   *
+   * @param channel the channel to prepare
+   * @return a {@link Runnable} that should be called when the send file is completed to revert the action
+   */
+  private Runnable prepareSendFile(Channel channel) {
+    // Remove the "compressor" from the pipeline to skip content encoding since FileRegion do zero-copy write,
+    // hence bypassing any user space data operation.
+    try {
+      final ChannelPipeline pipeline = channel.pipeline();
+      pipeline.remove("compressor");
+      return new Runnable() {
+        @Override
+        public void run() {
+          pipeline.addAfter("codec", "compressor", new HttpContentCompressor());
+        }
+      };
+    } catch (NoSuchElementException e) {
+      // Ignore if there is no compressor
+      return new Runnable() {
+        @Override
+        public void run() {
+          // no-op
+        }
+      };
     }
   }
 

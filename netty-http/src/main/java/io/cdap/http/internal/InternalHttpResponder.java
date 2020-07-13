@@ -39,16 +39,23 @@ import java.nio.ByteBuffer;
  */
 public class InternalHttpResponder extends AbstractHttpResponder {
 
-  private static final Logger LOG = LoggerFactory.getLogger(InternalHttpResponder.class);
+  private static final Logger LOG =
+      LoggerFactory.getLogger(InternalHttpResponder.class);
 
   private InternalHttpResponse response;
 
   @Override
-  public ChunkResponder sendChunkStart(final HttpResponseStatus status, HttpHeaders headers) {
+  public ChunkResponder sendChunkStart(final HttpResponseStatus status,
+                                       HttpHeaders headers) {
     return new ChunkResponder() {
 
       private ByteBuf contentChunks = Unpooled.EMPTY_BUFFER;
       private boolean closed;
+
+      @Override
+      public void flush() throws IOException {
+        // No op
+      }
 
       @Override
       public void sendChunk(ByteBuffer chunk) throws IOException {
@@ -80,7 +87,8 @@ public class InternalHttpResponder extends AbstractHttpResponder {
   }
 
   @Override
-  public void sendContent(HttpResponseStatus status, final ByteBuf content, HttpHeaders headers) {
+  public void sendContent(HttpResponseStatus status, final ByteBuf content,
+                          HttpHeaders headers) {
     response = new AbstractInternalResponse(status.code()) {
       @Override
       public InputStream openInputStream() throws IOException {
@@ -100,7 +108,8 @@ public class InternalHttpResponder extends AbstractHttpResponder {
   }
 
   @Override
-  public void sendContent(HttpResponseStatus status, BodyProducer bodyProducer, HttpHeaders headers) {
+  public void sendContent(HttpResponseStatus status, BodyProducer bodyProducer,
+                          HttpHeaders headers) {
     // Buffer all contents produced by the body producer
     ByteBuf contentChunks = Unpooled.EMPTY_BUFFER;
     try {
@@ -122,7 +131,8 @@ public class InternalHttpResponder extends AbstractHttpResponder {
       try {
         bodyProducer.handleError(t);
       } catch (Throwable et) {
-        LOG.warn("Exception raised from BodyProducer.handleError() for {}", bodyProducer, et);
+        LOG.warn("Exception raised from BodyProducer.handleError() for {}",
+                 bodyProducer, et);
       }
     }
   }
@@ -142,7 +152,8 @@ public class InternalHttpResponder extends AbstractHttpResponder {
   /**
    * Abstract implementation of {@link InternalHttpResponse}.
    */
-  private abstract static class AbstractInternalResponse implements InternalHttpResponse {
+  private abstract static class AbstractInternalResponse
+      implements InternalHttpResponse {
     private final int statusCode;
 
     AbstractInternalResponse(int statusCode) {

@@ -34,7 +34,7 @@
   <parent>
     <groupId>Waarp</groupId>
     <artifactId>Waarp-Shaded-Parent</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -71,6 +71,71 @@
 
   <build>
     <plugins>
+      <plugin>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>${maven-enforcer-plugin.version}</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>extra-enforcer-rules</artifactId>
+            <version>1.3</version>
+          </dependency>
+          <dependency>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>animal-sniffer-enforcer-rule</artifactId>
+            <version>1.19</version>
+          </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <id>enforce-tools</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireJavaVersion>
+                  <version>1.8</version>
+                </requireJavaVersion>
+                <requireMavenVersion>
+                  <version>[3.3.9,)</version>
+                </requireMavenVersion>
+              </rules>
+            </configuration>
+          </execution>
+          <execution>
+            <configuration>
+              <fail>true</fail>
+              <rules>
+                <dependencyConvergence/>
+              </rules>
+            </configuration>
+            <id>enforce-dependencies</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>enforce-bytecode-version</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <enforceBytecodeVersion>
+                  <maxJdkVersion>1.8</maxJdkVersion>
+                  <excludes>
+                    <exclude>org.mariadb.jdbc:mariadb-java-client</exclude>
+                    <exclude>mysql:mysql-connector-java</exclude>
+                  </excludes>
+                  <ignoredScopes>test</ignoredScopes>
+                </enforceBytecodeVersion>
+              </rules>
+              <fail>true</fail>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
@@ -110,10 +175,11 @@
               </transformers>
               <artifactSet>
                 <includes>
-                  <include>Waarp</include>
                   <include>*</include>
                 </includes>
                 <excludes>
+                  <exclude>io.netty</exclude>
+                  <exclude>Waarp</exclude>
                   <exclude>classworlds:classworlds</exclude>
                   <exclude>junit</exclude>
                   <exclude>jmock</exclude>

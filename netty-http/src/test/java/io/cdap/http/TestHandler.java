@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2019 Cask Data, Inc.
+ * Copyright © 2014-2020 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -37,6 +37,8 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.SortedSet;
@@ -60,6 +62,28 @@ import javax.ws.rs.QueryParam;
 public class TestHandler extends AbstractHttpHandler {
 
   private static final Gson GSON = new Gson();
+
+  @Path("auth/secured")
+  @GET
+  @Secured
+  public void testSecured(HttpRequest request, HttpResponder responder) {
+    responder.sendString(HttpResponseStatus.OK, "ALL GOOD");
+  }
+
+  @Path("auth/roles")
+  @GET
+  @RequiredRoles({"admin"})
+  public void testRoles(HttpRequest request, HttpResponder responder) {
+    responder.sendString(HttpResponseStatus.OK, "ALL GOOD");
+  }
+
+  @Path("auth/secured-roles")
+  @GET
+  @RequiredRoles({"admin"})
+  @Secured
+  public void testSecuredRoles(HttpRequest request, HttpResponder responder) {
+    responder.sendString(HttpResponseStatus.OK, "ALL GOOD");
+  }
 
   @Path("sleep/{seconds}")
   @GET
@@ -404,6 +428,19 @@ public class TestHandler extends AbstractHttpHandler {
     chunker.close();
   }
 
+  @Path("/largeChunk")
+  @GET
+  public void largeChunk(HttpRequest request, HttpResponder responder,
+                         @QueryParam("s") int chunkSize,
+                         @QueryParam("n") int count) throws IOException {
+    String msg = String.join("", Collections.nCopies(chunkSize, "0"));
+    try (ChunkResponder chunker = responder.sendChunkStart(HttpResponseStatus.OK)) {
+      for (int i = 0; i < count; i++) {
+        chunker.sendChunk(StandardCharsets.UTF_8.encode(msg));
+      }
+    }
+  }
+
   @Path("/produceBody")
   @GET
   public void produceBody(HttpRequest request, HttpResponder responder,
@@ -444,6 +481,29 @@ public class TestHandler extends AbstractHttpHandler {
             printer.close();
           }
         }
+      }
+    }, EmptyHttpHeaders.INSTANCE);
+  }
+
+  @Path("/produceBodyWithStatus")
+  @GET
+  public void produceBodyWithStatus(HttpRequest request, HttpResponder responder,
+                                    @QueryParam("status") @DefaultValue("200") final int status) {
+
+    responder.sendContent(HttpResponseStatus.valueOf(status), new BodyProducer() {
+      @Override
+      public ByteBuf nextChunk() {
+        return Unpooled.EMPTY_BUFFER;
+      }
+
+      @Override
+      public void finished() {
+        // no-op
+      }
+
+      @Override
+      public void handleError(@Nullable Throwable cause) {
+        // no-op
       }
     }, EmptyHttpHeaders.INSTANCE);
   }

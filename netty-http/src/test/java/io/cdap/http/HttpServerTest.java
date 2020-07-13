@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2019 Cask Data, Inc.
+ * Copyright © 2014-2020 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -115,6 +115,31 @@ public class HttpServerTest {
       .setHttpHandlers(new TestHandler())
       .setHttpChunkLimit(75 * 1024)
       .setExceptionHandler(EXCEPTION_HANDLER)
+      .setAuthHandler(new AuthHandler() {
+        @Override
+        public boolean isAuthenticated(HttpRequest request) {
+          return request.headers().contains(HttpHeaderNames.AUTHORIZATION);
+        }
+
+        @Override
+        public boolean hasRoles(HttpRequest request, String[] roles) {
+          for (String role : roles) {
+            if (request.headers().contains(HttpHeaderNames.AUTHORIZATION)) {
+              if (!request.headers().get(HttpHeaderNames.AUTHORIZATION).contains(role)) {
+                return false;
+              }
+            } else {
+              return false;
+            }
+          }
+          return true;
+        }
+
+        @Override
+        public String getWWWAuthenticateHeader() {
+          return "roles list";
+        }
+      })
       .setChannelPipelineModifier(new ChannelPipelineModifier() {
       @Override
       public void modify(ChannelPipeline pipeline) {
@@ -167,6 +192,53 @@ public class HttpServerTest {
   }
 
   @Test
+  public void testAuthSecured() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/auth/secured", HttpMethod.GET);
+    Assert.assertEquals(401, urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    urlConn = requestAuth("/test/v1/auth/secured", HttpMethod.GET, "");
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    String result = getContent(urlConn);
+    Assert.assertEquals("ALL GOOD", result);
+    urlConn.disconnect();
+  }
+
+  @Test
+  public void testAuthRoles() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/auth/roles", HttpMethod.GET);
+    Assert.assertEquals(403, urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    urlConn = requestAuth("/test/v1/auth/roles", HttpMethod.GET, "mod");
+    Assert.assertEquals(403, urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    urlConn = requestAuth("/test/v1/auth/roles", HttpMethod.GET, "admin");
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    String result = getContent(urlConn);
+    Assert.assertEquals("ALL GOOD", result);
+    urlConn.disconnect();
+  }
+
+  @Test
+  public void testAuthSecuredRoles() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/auth/secured-roles", HttpMethod.GET);
+    Assert.assertEquals(401, urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    urlConn = requestAuth("/test/v1/auth/secured-roles", HttpMethod.GET, "mod");
+    Assert.assertEquals(403, urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    urlConn = requestAuth("/test/v1/auth/secured-roles", HttpMethod.GET, "admin");
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    String result = getContent(urlConn);
+    Assert.assertEquals("ALL GOOD", result);
+    urlConn.disconnect();
+  }
+
+  @Test
   public void testUploadDisconnect() throws Exception {
     File filePath = new File(tmpFolder.newFolder(), "test.txt");
 
@@ -213,6 +285,10 @@ public class HttpServerTest {
   public void testSendFile() throws IOException {
     File filePath = new File(tmpFolder.newFolder(), "test.txt");
     HttpURLConnection urlConn = request("/test/v1/stream/file", HttpMethod.POST);
+    // Enable accepting compression. For HTTP case, the response won't be compressed since FileRegion is being used.
+    // For HTTPs, the response will be compressed.
+    // See https://github.com/cdapio/netty-http/issues/68
+    urlConn.setRequestProperty(HttpHeaderNames.ACCEPT_ENCODING.toString(), HttpHeaderValues.GZIP_DEFLATE.toString());
     urlConn.setRequestProperty("File-Path", filePath.getAbsolutePath());
     urlConn.getOutputStream().write("content".getBytes(Charset.forName("UTF-8")));
     Assert.assertEquals(200, urlConn.getResponseCode());
@@ -580,6 +656,19 @@ public class HttpServerTest {
   }
 
   @Test
+  public void testLargeChunkResponse() throws IOException {
+    // Chunk limit for test is 75K, so we request for 150 chunks, each is 1K in length
+    HttpURLConnection urlConn = request("/test/v1/largeChunk?s=1024&n=150", HttpMethod.GET);
+    try {
+      String response = getContent(urlConn);
+      String expected = String.join("", Collections.nCopies(150 * 1024, "0"));
+      Assert.assertEquals(expected, response);
+    } finally {
+      urlConn.disconnect();
+    }
+  }
+
+  @Test
   public void testStringQueryParam() throws IOException {
     // First send without query, for String type, should get defaulted to null.
     testContent("/test/v1/stringQueryParam/mypath", "mypath:null", HttpMethod.GET);
@@ -779,6 +868,14 @@ public class HttpServerTest {
   }
 
   @Test
+  public void testBodyProducerStatus() throws Exception {
+    for (int status : Arrays.asList(200, 400, 404, 500)) {
+      HttpURLConnection urlConn = request("/test/v1/produceBodyWithStatus?status=" + status, HttpMethod.GET);
+      Assert.assertEquals(status, urlConn.getResponseCode());
+    }
+  }
+
+  @Test
   public void testCompressResponse() throws Exception {
     HttpURLConnection urlConn = request("/test/v1/compressResponse?message=Testing+message", HttpMethod.GET);
     urlConn.setRequestProperty(HttpHeaderNames.ACCEPT_ENCODING.toString(), HttpHeaderValues.GZIP_DEFLATE.toString());
@@ -793,7 +890,7 @@ public class HttpServerTest {
     urlConn.setRequestProperty(HttpHeaderNames.ACCEPT_ENCODING.toString(), HttpHeaderValues.GZIP_DEFLATE.toString());
 
     Assert.assertEquals(HttpResponseStatus.OK.code(), urlConn.getResponseCode());
-    Assert.assertTrue(urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()) != null);
+    Assert.assertNotNull(urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()));
 
     Assert.assertEquals("Testing message chunk", getContent(urlConn));
   }
@@ -842,6 +939,18 @@ public class HttpServerTest {
 
   protected Socket createRawSocket(URL url) throws IOException {
     return new Socket(url.getHost(), url.getPort());
+  }
+
+  protected HttpURLConnection requestAuth(String path, HttpMethod method, String role) throws IOException {
+    URL url = getBaseURI().resolve(path).toURL();
+    HttpURLConnection urlConn = (HttpURLConnection) url.openConnection();
+    if (method == HttpMethod.POST || method == HttpMethod.PUT) {
+      urlConn.setDoOutput(true);
+    }
+    urlConn.setRequestMethod(method.name());
+    urlConn.setRequestProperty(HttpHeaderNames.AUTHORIZATION.toString(), role);
+
+    return urlConn;
   }
 
   protected HttpURLConnection request(String path, HttpMethod method, boolean keepAlive) throws IOException {
