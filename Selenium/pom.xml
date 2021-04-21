@@ -34,7 +34,7 @@
   <parent>
     <groupId>Waarp</groupId>
     <artifactId>Waarp-Shaded-Parent</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.3</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -83,7 +83,7 @@
           <dependency>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>animal-sniffer-enforcer-rule</artifactId>
-            <version>1.19</version>
+            <version>1.20</version>
           </dependency>
         </dependencies>
         <executions>
@@ -127,6 +127,9 @@
                   <excludes>
                     <exclude>org.mariadb.jdbc:mariadb-java-client</exclude>
                     <exclude>mysql:mysql-connector-java</exclude>
+                    <exclude>com.oracle.database.jdbc:ojdbc6</exclude>
+                    <exclude>xercesImpl:xerces</exclude>
+                    <exclude>com.google.guava</exclude>
                   </excludes>
                   <ignoredScopes>test</ignoredScopes>
                 </enforceBytecodeVersion>
@@ -192,7 +195,20 @@
                   <exclude>org.testcontainers</exclude>
                   <exclude>net.java.dev.jna</exclude>
                   <exclude>org.apache.ant</exclude>
+                  <exclude>org.apache.*</exclude>
+                  <exclude>*:commons-io</exclude>
+                  <exclude>com.google.code.findbugs</exclude>
+                  <exclude>*:commons-net</exclude>
                   <exclude>Oracle</exclude>
+                  <exclude>com.oracle.database.*</exclude>
+                  <exclude>net.bytebuddy</exclude>
+                  <exclude>*:commons-exec</exclude>
+                  <exclude>*:httpclient</exclude>
+                  <exclude>*:httpcore</exclude>
+                  <exclude>*:commons-codec</exclude>
+                  <exclude>xerces</exclude>
+                  <exclude>*:xml-apis</exclude>
+                  <exclude>*:commons-logging</exclude>
                 </excludes>
               </artifactSet>
               <!--<filters>
@@ -213,10 +229,6 @@
                 <relocation>
                   <pattern>com.google.common</pattern>
                   <shadedPattern>com.shaded.google.common</shadedPattern>
-                </relocation>
-                <relocation>
-                  <pattern>org.apache</pattern>
-                  <shadedPattern>org.shaded.apache</shadedPattern>
                 </relocation>
               </relocations>
             </configuration>
